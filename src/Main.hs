@@ -2,8 +2,10 @@
 
 module Main (main) where
 
+import Control.Exception (bracket_)
 import Control.Monad (forM_)
 import Data.Maybe (mapMaybe)
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
 import Data.Vector ((!))
@@ -11,6 +13,7 @@ import Data.Vector qualified as Vector
 import Spotify
 import System.Environment (getArgs)
 import System.Exit (die)
+import System.IO (hFlush, stdout, stdin, hGetEcho, hSetEcho)
 import System.Random.Stateful
 import WMCE (Album(..), parseCharts)
 
@@ -51,17 +54,36 @@ addRandomTracksToPlaylist tk playlistId albums = do
   forM_ warnings (putStrLn . renderWarning)
   addTracksToPlaylist tk playlistId (Vector.fromList trackIds)
 
+-- Code adapted from https://stackoverflow.com/questions/4064378/prompting-for-a-password-in-haskell-command-line-application
+withEcho :: Bool -> IO a -> IO a
+withEcho echo action = do
+  old <- hGetEcho stdin
+  bracket_ (hSetEcho stdin echo) (hSetEcho stdin old) action
+
+prompt :: Text -> (Text -> IO (Either Text a)) -> IO a
+prompt p validate = do
+  Text.putStr p
+  hFlush stdout
+  input <- withEcho False Text.getLine
+  putChar '\n'
+  outputE <- validate input
+  case outputE of
+    Left err -> do
+      Text.putStrLn err
+      prompt p validate
+    Right a -> pure a
+
 main :: IO ()
 main = do
   args <- getArgs
   case args of
-    [fname, playlistId, tk] -> do
+    [fname, playlistId] -> do
       input <- Text.readFile fname
       let albumsE = parseCharts input
       case albumsE of
-        Left err -> putStrLn err
+        Left err -> die err
         Right albums -> do
-          let tk' = AccessToken $ Text.pack tk
+          tk <- prompt "OAuth2 access token: " (pure . Right . AccessToken)
           let playlistId' = PlaylistId $ Text.pack playlistId
-          addRandomTracksToPlaylist tk' playlistId' albums
-    _ -> die "Usage: wmce-playlist <file> <playlist_id> <oauth2_token>"
+          addRandomTracksToPlaylist tk playlistId' albums
+    _ -> die "Usage: wmce-playlist <file> <playlist_id>"
