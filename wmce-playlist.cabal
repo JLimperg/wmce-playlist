@@ -12,8 +12,8 @@ author:             Jannis Limperg
 maintainer:         jannis@limperg.de
 copyright:          (c) 2022 Jannis Limperg
 build-type:         Simple
--- extra-doc-files:    
--- extra-source-files:
+-- extra-doc-files:
+extra-source-files: README.md
 
 executable wmce-playlist
     main-is:          Main.hs
